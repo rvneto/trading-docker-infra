@@ -1,0 +1,21 @@
+global:
+  scrape_interval: 15s # Collection frequency
+  evaluation_interval: 15s
+
+scrape_configs:
+  # Prometheus monitoring itself
+  - job_name: 'prometheus'
+    static_configs:
+      - targets: ['localhost:9090']
+
+  # Placeholder for upcoming Broker microservices
+  - job_name: 'broker-services'
+    metrics_path: '/actuator/prometheus' # Default Spring Boot path
+    static_configs:
+      - targets: [] # Hostnames will be added as APIs spin up
+
+  # Placeholder for upcoming B3 microservices
+  - job_name: 'b3-services'
+    metrics_path: '/metrics'
+    static_configs:
+      - targets: []
