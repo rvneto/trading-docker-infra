@@ -4,8 +4,11 @@ networks:
     name: ${DOCKER_NETWORK:-trading-network}
 
 services:
-  # --- RELATIONAL LAYER (SQL) ---
-  # 1. Identity DB (MySQL)
+
+  # -----------------------------------------
+  # RELATIONAL DATABASES
+  # -----------------------------------------
+
   broker-identity-db:
     image: mysql:8.0
     container_name: broker-identity-db
@@ -16,13 +19,17 @@ services:
       MYSQL_PASSWORD: ${BROKER_DB_PASS}
       MYSQL_ROOT_PASSWORD: ${BROKER_DB_ROOT_PASS}
     ports:
-      - '3306:3306'
+      - "3306:3306"
     volumes:
       - ./data/mysql/identity:/var/lib/mysql
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ubroker_user", "-pbroker_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # 2. Wallet DB (MySQL)
   broker-wallet-db:
     image: mysql:8.0
     container_name: broker-wallet-db
@@ -33,13 +40,17 @@ services:
       MYSQL_PASSWORD: ${BROKER_DB_PASS}
       MYSQL_ROOT_PASSWORD: ${BROKER_DB_ROOT_PASS}
     ports:
-      - '3307:3306'
+      - "3307:3306"
     volumes:
       - ./data/mysql/wallet:/var/lib/mysql
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ubroker_user", "-pbroker_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # 3. Order DB (MySQL)
   broker-order-db:
     image: mysql:8.0
     container_name: broker-order-db
@@ -50,13 +61,17 @@ services:
       MYSQL_PASSWORD: ${BROKER_DB_PASS}
       MYSQL_ROOT_PASSWORD: ${BROKER_DB_ROOT_PASS}
     ports:
-      - '3308:3306'
+      - "3308:3306"
     volumes:
       - ./data/mysql/order:/var/lib/mysql
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ubroker_user", "-pbroker_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # 4. Asset DB (MySQL)
   broker-asset-db:
     image: mysql:8.0
     container_name: broker-asset-db
@@ -67,13 +82,17 @@ services:
       MYSQL_PASSWORD: ${BROKER_DB_PASS}
       MYSQL_ROOT_PASSWORD: ${BROKER_DB_ROOT_PASS}
     ports:
-      - '3309:3306'
+      - "3309:3306"
     volumes:
       - ./data/mysql/asset:/var/lib/mysql
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "mysqladmin", "ping", "-h", "localhost", "-ubroker_user", "-pbroker_pass"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # 5. B3 Core DB (PostgreSQL)
   b3-core-db:
     image: postgres:15
     container_name: b3-core-db
@@ -83,63 +102,90 @@ services:
       POSTGRES_USER: ${B3_CORE_USER}
       POSTGRES_PASSWORD: ${B3_CORE_PASSWORD}
     ports:
-      - '5432:5432'
+      - "5432:5432"
     volumes:
       - ./data/postgres:/var/lib/postgresql/data
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD-SHELL", "pg_isready -U ${B3_CORE_USER} -d ${B3_CORE_DB}"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # --- NOSQL LAYER (MONGO) ---
-  # A single instance managing two logical databases
+  # -----------------------------------------
+  # NOSQL
+  # -----------------------------------------
+
   broker-mongodb:
     image: mongo:6.0
     container_name: broker-mongodb
     restart: always
-    environment:
-      MONGO_INITDB_ROOT_USERNAME: ${MONGO_ROOT_USER}
-      MONGO_INITDB_ROOT_PASSWORD: ${MONGO_ROOT_PASS}
     ports:
-      - '${MONGO_PORT}:27017'
+      - "${MONGO_PORT}:27017"
     volumes:
       - ./data/mongo:/data/db
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "mongosh", "--eval", "db.adminCommand('ping')"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # --- CACHE LAYER (REDIS) ---
-  # Lightweight instances isolated by domain
+  # -----------------------------------------
+  # CACHE
+  # -----------------------------------------
+
   broker-asset-cache:
     image: redis:7.0-alpine
     container_name: broker-asset-cache
     ports:
-      - '${REDIS_BROKER_ASSET_PORT}:6379'
+      - "${REDIS_BROKER_ASSET_PORT}:6379"
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
   b3-market-cache:
     image: redis:7.0-alpine
     container_name: b3-market-cache
     ports:
-      - '${REDIS_B3_MARKET_PORT}:6379'
+      - "${REDIS_B3_MARKET_PORT}:6379"
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # --- MESSAGING LAYER ---
-  # RabbitMQ (Official)
-  rabbitmq:
+  # -----------------------------------------
+  # MESSAGING
+  # -----------------------------------------
+
+  trading-rabbitmq:
     image: rabbitmq:3-management
     container_name: trading-rabbitmq
     restart: always
     environment:
-      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER:-admin}
-      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS:-admin_pass}
+      RABBITMQ_DEFAULT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_DEFAULT_PASS: ${RABBITMQ_DEFAULT_PASS}
     ports:
-      - '${RABBITMQ_PORT:-5672}:5672'
-      - '${RABBITMQ_UI_PORT:-15672}:15672'
+      - "${RABBITMQ_PORT}:5672"
+      - "${RABBITMQ_UI_PORT}:15672"
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD", "rabbitmq-diagnostics", "ping"]
+      interval: 10s
+      timeout: 5s
+      retries: 5
 
-  # Kafka (Official Apache Kafka — more lightweight and stable for KRaft)
-  kafka:
+  trading-kafka:
     image: apache/kafka:3.7.0
     container_name: trading-kafka
     restart: always
@@ -147,23 +193,31 @@ services:
       KAFKA_NODE_ID: 1
       KAFKA_PROCESS_ROLES: broker,controller
       KAFKA_LISTENERS: EXTERNAL://0.0.0.0:9092,INTERNAL://0.0.0.0:29092,CONTROLLER://0.0.0.0:9093
-      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:9092,INTERNAL://finance-kafka:29092
+      KAFKA_ADVERTISED_LISTENERS: EXTERNAL://localhost:9092,INTERNAL://trading-kafka:29092
       KAFKA_LISTENER_SECURITY_PROTOCOL_MAP: CONTROLLER:PLAINTEXT,EXTERNAL:PLAINTEXT,INTERNAL:PLAINTEXT
       KAFKA_INTER_BROKER_LISTENER_NAME: INTERNAL
       KAFKA_CONTROLLER_LISTENER_NAMES: CONTROLLER
-      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@localhost:9093
+      KAFKA_CONTROLLER_QUORUM_VOTERS: 1@trading-kafka:9093
       KAFKA_OFFSETS_TOPIC_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_REPLICATION_FACTOR: 1
       KAFKA_TRANSACTION_STATE_LOG_MIN_ISR: 1
       KAFKA_GROUP_INITIAL_REBALANCE_DELAY_MS: 0
-      KAFKA_CLUSTER_ID: MkU3OEVBNTcwNTJENDM2Qk
+      KAFKA_CLUSTER_ID: ${KAFKA_CLUSTER_ID}
     ports:
-      - '9092:9092'
+      - "${KAFKA_PORT}:9092"
     networks:
       - trading-network
+    healthcheck:
+      test: ["CMD-SHELL", "/opt/kafka/bin/kafka-broker-api-versions.sh --bootstrap-server localhost:9092"]
+      interval: 15s
+      timeout: 10s
+      retries: 5
 
-  # --- OBSERVABILITY LAYER (Centered) ---
-  prometheus:
+  # -----------------------------------------
+  # OBSERVABILITY
+  # -----------------------------------------
+
+  trading-prometheus:
     image: prom/prometheus:latest
     container_name: trading-prometheus
     restart: always
@@ -171,24 +225,244 @@ services:
       - ./config/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml
       - ./data/prometheus:/prometheus
     command:
-      - '--config.file=/etc/prometheus/prometheus.yml'
-      - '--storage.tsdb.path=/prometheus'
-      - '--web.console.libraries=/usr/share/prometheus/console_libraries'
-      - '--web.console.templates=/usr/share/prometheus/consoles'
+      - "--config.file=/etc/prometheus/prometheus.yml"
+      - "--storage.tsdb.path=/prometheus"
+      - "--web.console.libraries=/usr/share/prometheus/console_libraries"
+      - "--web.console.templates=/usr/share/prometheus/consoles"
     ports:
-      - '${PROMETHEUS_PORT:-9090}:9090'
+      - "${PROMETHEUS_PORT}:9090"
     networks:
       - trading-network
 
-  grafana:
+  trading-grafana:
     image: grafana/grafana:latest
     container_name: trading-grafana
     restart: always
     environment:
-      - GF_SECURITY_ADMIN_PASSWORD=admin # Senha inicial
+      GF_SECURITY_ADMIN_PASSWORD: admin
     volumes:
       - ./data/grafana:/var/lib/grafana
     ports:
-      - '${GRAFANA_PORT:-3000}:3000'
+      - "${GRAFANA_PORT}:3000"
+    networks:
+      - trading-network
+
+  # -----------------------------------------
+  # JAVA SERVICES
+  # -----------------------------------------
+
+  trading-broker-identity:
+    build:
+      context: ../trading-broker-identity
+    image: trading-broker-identity:latest
+    container_name: trading-broker-identity
+    restart: on-failure
+    ports:
+      - "8089:8089"
+    environment:
+      DB_HOST: broker-identity-db
+      DB_PORT: 3306
+      DB_USER: ${BROKER_DB_USER}
+      DB_PASSWORD: ${BROKER_DB_PASS}
+      JWT_SECRET: ${JWT_SECRET}
+      WALLET_SERVICE_URL: http://trading-broker-wallet:8085
+    depends_on:
+      broker-identity-db:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  trading-broker-asset:
+    build:
+      context: ../trading-broker-asset
+    image: trading-broker-asset:latest
+    container_name: trading-broker-asset
+    restart: on-failure
+    ports:
+      - "8083:8083"
+    environment:
+      DB_HOST: broker-asset-db
+      DB_PORT: 3306
+      DB_USER: ${BROKER_DB_USER}
+      DB_PASSWORD: ${BROKER_DB_PASS}
+      REDIS_HOST: broker-asset-cache
+      REDIS_PORT: 6379
+      KAFKA_HOST: trading-kafka
+      KAFKA_PORT: "29092"
+    depends_on:
+      broker-asset-db:
+        condition: service_healthy
+      broker-asset-cache:
+        condition: service_healthy
+      trading-kafka:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  trading-broker-wallet:
+    build:
+      context: ../trading-broker-wallet
+    image: trading-broker-wallet:latest
+    container_name: trading-broker-wallet
+    restart: on-failure
+    ports:
+      - "8085:8085"
+    environment:
+      DB_HOST: broker-wallet-db
+      DB_PORT: 3306
+      DB_USER: ${BROKER_DB_USER}
+      DB_PASSWORD: ${BROKER_DB_PASS}
+      KAFKA_HOST: trading-kafka
+      KAFKA_PORT: "29092"
+    depends_on:
+      broker-wallet-db:
+        condition: service_healthy
+      trading-kafka:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  trading-broker-order:
+    build:
+      context: ../trading-broker-order
+    image: trading-broker-order:latest
+    container_name: trading-broker-order
+    restart: on-failure
+    ports:
+      - "8088:8088"
+    environment:
+      DB_HOST: broker-order-db
+      DB_PORT: 3306
+      DB_USER: ${BROKER_DB_USER}
+      DB_PASSWORD: ${BROKER_DB_PASS}
+      KAFKA_HOST: trading-kafka
+      KAFKA_PORT: "29092"
+      RABBIT_HOST: trading-rabbitmq
+      RABBIT_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBIT_PASSWORD: ${RABBITMQ_DEFAULT_PASS}
+      WALLET_SERVICE_URL: http://trading-broker-wallet:8085
+      ASSET_SERVICE_URL: http://trading-broker-asset:8083
+    depends_on:
+      broker-order-db:
+        condition: service_healthy
+      trading-kafka:
+        condition: service_healthy
+      trading-rabbitmq:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  trading-broker-report:
+    build:
+      context: ../trading-broker-report
+    image: trading-broker-report:latest
+    container_name: trading-broker-report
+    restart: on-failure
+    ports:
+      - "8087:8087"
+    environment:
+      MONGO_URI: mongodb://broker-mongodb:27017/${MONGO_DB_REPORT}
+      KAFKA_HOST: trading-kafka
+      KAFKA_PORT: "29092"
+    depends_on:
+      broker-mongodb:
+        condition: service_healthy
+      trading-kafka:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  trading-b3-matching-engine:
+    build:
+      context: ../trading-b3-matching-engine
+    image: trading-b3-matching-engine:latest
+    container_name: trading-b3-matching-engine
+    restart: on-failure
+    ports:
+      - "8091:8091"
+    environment:
+      DB_HOST: b3-core-db
+      DB_USER: ${B3_CORE_USER}
+      DB_PASS: ${B3_CORE_PASSWORD}
+      RABBITMQ_HOST: trading-rabbitmq
+      RABBITMQ_USER: ${RABBITMQ_DEFAULT_USER}
+      RABBITMQ_PASS: ${RABBITMQ_DEFAULT_PASS}
+      REDIS_HOST: b3-market-cache
+      REDIS_PORT: 6379
+    depends_on:
+      b3-core-db:
+        condition: service_healthy
+      trading-rabbitmq:
+        condition: service_healthy
+      b3-market-cache:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  trading-b3-market-sync:
+    build:
+      context: ../trading-b3-market-sync
+    image: trading-b3-market-sync:latest
+    container_name: trading-b3-market-sync
+    restart: on-failure
+    ports:
+      - "8096:8096"
+    environment:
+      REDIS_HOST: b3-market-cache
+      REDIS_PORT: 6379
+      BRAPI_TOKEN: ${BRAPI_TOKEN}
+    depends_on:
+      b3-market-cache:
+        condition: service_healthy
+    networks:
+      - trading-network
+
+  trading-broker-gateway:
+    build:
+      context: ../trading-broker-gateway
+    image: trading-broker-gateway:latest
+    container_name: trading-broker-gateway
+    restart: on-failure
+    ports:
+      - "8080:8080"
+    environment:
+      JWT_SECRET: ${JWT_SECRET}
+      IDENTITY_SERVICE_URL: http://trading-broker-identity:8089
+      ORDER_SERVICE_URL: http://trading-broker-order:8088
+      WALLET_SERVICE_URL: http://trading-broker-wallet:8085
+      ASSET_SERVICE_URL: http://trading-broker-asset:8083
+      REPORT_SERVICE_URL: http://trading-broker-report:8087
+    depends_on:
+      - trading-broker-identity
+      - trading-broker-order
+      - trading-broker-wallet
+      - trading-broker-asset
+      - trading-broker-report
+    networks:
+      - trading-network
+
+  # -----------------------------------------
+  # PYTHON SERVICE
+  # -----------------------------------------
+
+  trading-broker-market-data:
+    build:
+      context: ../trading-broker-market-data
+    image: trading-broker-market-data:latest
+    container_name: trading-broker-market-data
+    restart: on-failure
+    environment:
+      MONGO_HOST: broker-mongodb
+      MONGO_PORT: 27017
+      MONGO_DB: ${MONGO_DB_MARKET}
+      KAFKA_BOOTSTRAP_SERVERS: trading-kafka:29092
+      KAFKA_TOPIC: trading-assets-market-data-v1
+      SYNC_INTERVAL_MINUTES: 30
+      BRAPI_TOKEN: ${BRAPI_TOKEN}
+    depends_on:
+      broker-mongodb:
+        condition: service_healthy
+      trading-kafka:
+        condition: service_healthy
     networks:
       - trading-network
